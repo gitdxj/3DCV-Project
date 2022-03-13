@@ -173,5 +173,45 @@ def read_ply_vtx(filepath):
     return np.array(pts)
 
 
-def get_bb(bb):
-   pass
+def get_bb(label):
+    border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
+    img_width = 480
+    img_length = 640
+    rows = np.any(label, axis=1)
+    cols = np.any(label, axis=0)
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    rmax += 1
+    cmax += 1
+    r_b = rmax - rmin
+    for tt in range(len(border_list)):
+        if r_b > border_list[tt] and r_b < border_list[tt + 1]:
+            r_b = border_list[tt + 1]
+            break
+    c_b = cmax - cmin
+    for tt in range(len(border_list)):
+        if c_b > border_list[tt] and c_b < border_list[tt + 1]:
+            c_b = border_list[tt + 1]
+            break
+    center = [int((rmin + rmax) / 2), int((cmin + cmax) / 2)]
+    rmin = center[0] - int(r_b / 2)
+    rmax = center[0] + int(r_b / 2)
+    cmin = center[1] - int(c_b / 2)
+    cmax = center[1] + int(c_b / 2)
+    if rmin < 0:
+        delt = -rmin
+        rmin = 0
+        rmax += delt
+    if cmin < 0:
+        delt = -cmin
+        cmin = 0
+        cmax += delt
+    if rmax > img_width:
+        delt = rmax - img_width
+        rmax = img_width
+        rmin -= delt
+    if cmax > img_length:
+        delt = cmax - img_length
+        cmax = img_length
+        cmin -= delt
+    return rmin, rmax, cmin, cmax
