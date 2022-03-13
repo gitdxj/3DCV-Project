@@ -25,34 +25,36 @@ class LinemodDataset(data.Dataset):
         self.gt_dict = dict()          # ground truth: rotation, translation and bb
         self.vtx_dict = dict()         # vertexes of models read from ply file
 
-        model_info_path = os.path.join(dataset_path, 'models_info.yml')
-        self.model_info_dict = yaml.load(open(model_info_path), Loader=yaml.CLoader)   # key: obj_index, val: dict
+        model_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
+#         self.model_info_dict = yaml.load(open(model_info_path), Loader=yaml.CLoader)   # key: obj_index, val: dict
+        self.model_info_dict = yaml.load(open(model_info_path))
 
         for obj in obj_list:
             if mode == 'train':
-                index_file = os.path.join(dataset_path, 'data', str(obj), 'train.txt')
+                index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'train.txt')
             else:
-                index_file = os.path.join(dataset_path, 'data', str(obj), 'test.txt')
+                index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'test.txt')
             file = open(index_file)
             index_list = [line.rstrip() for line in file]   # get rid of '\n' in each line, elements are of str
 
-            gt_path = os.path.join(dataset_path, 'data', str(obj), 'gt.yml')
-            info_path = os.path.join(dataset_path, 'data', str(obj), 'info.yml')
-            ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj) + '.ply')
+            gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
+            info_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'info.yml')
+            ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj).zfill(2) + '.ply')
 
             # read vertexes of model from ply file
             vtx = read_ply_vtx(ply_path)
             self.vtx_dict[obj] = vtx
             # read ground truth to gt_dict
-            self.gt_dict[obj] = yaml.load(gt_path, Loader=yaml.CLoader)
+#             self.gt_dict[obj] = yaml.load(gt_path, Loader=yaml.CLoader)
+            self.gt_dict[obj] = yaml.load(open(gt_path))
 
             for index in index_list:
-                rgb_path = os.path.join(dataset_path, 'data', 'rgb', index+'.png')
-                depth_path = os.path.join(dataset_path, 'data', 'depth', index+'.png')
+                rgb_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'rgb', index+'.png')
+                depth_path = os.path.join(dataset_path, 'data', str(obj).zfill(2),  'depth', index+'.png')
                 if mode == 'eval':
-                    label_path = os.path.join(dataset_path, 'segnet_results', str(obj)+'_label', index+'_label.png')
+                    label_path = os.path.join(dataset_path, 'segnet_results', str(obj).zfill(2)+'_label', index+'_label.png')
                 else:
-                    label_path = os.path.join(dataset_path, 'data', str(obj), 'mask', index+'.png')
+                    label_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'mask', index+'.png')
 
                 self.obj_list.append(obj)
                 self.index_list.append(int(index))
@@ -132,9 +134,8 @@ class LinemodDataset(data.Dataset):
         target_translation = np.array(gt['cam_t_m2c']) / 1000
 
         gt_translation = target_translation
-        target_translation -= cloud
-        target_translation /= np.linalg.norm(target_translation, axis=1)
-        target_translation = np.array([target_translation])
+        target_translation = target_translation - cloud
+        target_translation = target_translation / np.linalg.norm(target_translation, axis=1).reshape(-1, 1)
 
         model_vtx = self.vtx_dict[obj_id] / 1000.0
         vtx_choice = np.random.choice(len(model_vtx), self.num_pt_mesh, replace=False)
@@ -173,16 +174,18 @@ def read_ply_vtx(filepath):
     return np.array(pts)
 
 
-def get_bb(label):
+def get_bb(bbox):
     border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
-    img_width = 480
-    img_length = 640
-    rows = np.any(label, axis=1)
-    cols = np.any(label, axis=0)
-    rmin, rmax = np.where(rows)[0][[0, -1]]
-    cmin, cmax = np.where(cols)[0][[0, -1]]
-    rmax += 1
-    cmax += 1
+    bbx = [bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]]
+    if bbx[0] < 0:
+        bbx[0] = 0
+    if bbx[1] >= 480:
+        bbx[1] = 479
+    if bbx[2] < 0:
+        bbx[2] = 0
+    if bbx[3] >= 640:
+        bbx[3] = 639
+    rmin, rmax, cmin, cmax = bbx[0], bbx[1], bbx[2], bbx[3]
     r_b = rmax - rmin
     for tt in range(len(border_list)):
         if r_b > border_list[tt] and r_b < border_list[tt + 1]:
@@ -206,12 +209,12 @@ def get_bb(label):
         delt = -cmin
         cmin = 0
         cmax += delt
-    if rmax > img_width:
-        delt = rmax - img_width
-        rmax = img_width
+    if rmax > 480:
+        delt = rmax - 480
+        rmax = 480
         rmin -= delt
-    if cmax > img_length:
-        delt = cmax - img_length
-        cmax = img_length
+    if cmax > 640:
+        delt = cmax - 640
+        cmax = 640
         cmin -= delt
     return rmin, rmax, cmin, cmax
