@@ -14,14 +14,14 @@ class LinemodDataset(data.Dataset):
         self.mode = mode
         self.objects = obj_list
         self.cloud_pt_num = cloud_pt_num
-        self.sys_obj = [7, 8]
+        self.sym_obj = [7, 8]
 
         self.rgb_list = []        # path to rgb img
         self.depth_list = []      # path to depth img
         self.label_list = []      # path to mask
         self.obj_list = []        # obj index: 1 to 15
         self.index_list = []      # img index
-        # self.diameter_dict = dict()   # model diameters
+        self.diameter_dict = dict()   # model diameters
         self.gt_dict = dict()          # ground truth: rotation, translation and bb
         self.vtx_dict = dict()         # vertexes of models read from ply file
 
@@ -40,6 +40,11 @@ class LinemodDataset(data.Dataset):
             gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
             info_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'info.yml')
             ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj).zfill(2) + '.ply')
+            models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
+
+            # read model diameter
+            models_info_yml = yaml.load(open(models_info_path))
+            self.diameter_dict[obj] = models_info_yml[obj]['diameter']
 
             # read vertexes of model from ply file
             vtx = read_ply_vtx(ply_path)
@@ -153,6 +158,15 @@ class LinemodDataset(data.Dataset):
 
     def __len__(self):
        return len(self.rgb_list)
+
+    def get_sym_list(self):
+        return self.sym_obj
+
+    def get_obj_diameter(self, obj_id):
+        if obj_id not in self.diameter_dict:
+            return None
+        else:
+            return self.diameter_dict[obj_id]
 
 
 def read_ply_vtx(filepath):
