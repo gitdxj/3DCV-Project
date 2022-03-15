@@ -10,8 +10,8 @@ def train_linemod(epochs):
     dataset_path = '/input/Linemod_preprocessed'
 
     # load training set and test set
-    train_set = LinemodDataset(mode='train', dataset_path=dataset_path, cloud_pt_num=500)
-    test_set = LinemodDataset(mode='test', dataset_path=dataset_path, cloud_pt_num=500)
+    train_set = LinemodDataset(mode='train', add_noise=True, dataset_dir=dataset_path, num_points=500, noise_trans=0.01)
+    test_set = LinemodDataset(mode='test', add_noise=False, dataset_dir=dataset_path, num_points=500)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False)
 
@@ -51,7 +51,7 @@ def train_linemod(epochs):
             obj_idx = Variable(obj_idx).cuda()      # shape: 1
             gt_t = Variable(gt_t).cuda()            # shape: 3
 
-            obj_diameter = train_set.diameter_dict[train_set.objects[obj_idx]]
+            obj_diameter = train_set.get_model_diameter(train_set.objects[obj_idx])
 
             # predict
             pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)

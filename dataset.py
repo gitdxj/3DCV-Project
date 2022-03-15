@@ -1,234 +1,259 @@
 # The code is adapted from https://github.com/j96w/DenseFusion/blob/master/datasets/linemod/dataset.py
 
 import os
-import torch
+import errno
+import random
+
 import numpy as np
-from PIL import Image
-import torchvision.transforms as transforms
-import torch.utils.data as data
+import numpy.ma as ma
 import yaml
+import pandas as pd
+from PIL import Image
+import torch
+import torchvision.transforms as transforms
+from torch.utils.data import Dataset
 
 
-class LinemodDataset(data.Dataset):
-    def __init__(self, mode, dataset_path, cloud_pt_num, obj_list=[1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]):
-        self.mode = mode
-        self.objects = obj_list
-        self.cloud_pt_num = cloud_pt_num
-        self.sym_obj = [7, 8]
+class LinemodDataset(Dataset):
+    def __init__(self, mode, add_noise, num_points, num_points_model=500, noise_trans=None,
+                 dataset_dir="data/Linemod_preprocessed/"):
 
-        self.rgb_list = []        # path to rgb img
-        self.depth_list = []      # path to depth img
-        self.label_list = []      # path to mask
-        self.obj_list = []        # obj index: 1 to 15
-        self.index_list = []      # img index
-        self.diameter_dict = dict()   # model diameters
-        self.gt_dict = dict()          # ground truth: rotation, translation and bb
-        self.vtx_dict = dict()         # vertexes of models read from ply file
+        # mode is either "train", "test" or "eval". train and test mode use the train/test images from the
+        # original linemod dataset, whereas eval mode uses the results from the SegNet
+        if mode in ["train", "test", "eval"]:
+            self.mode = mode
+        else:
+            raise ValueError("invalid mode specified, mode has to be train, test or eval")
 
-        model_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
-#         self.model_info_dict = yaml.load(open(model_info_path), Loader=yaml.CLoader)   # key: obj_index, val: dict
-        self.model_info_dict = yaml.load(open(model_info_path))
+        # whether to add noise to the image, the translation vector and the object point cloud
+        self.add_noise = add_noise
+        if self.add_noise and (noise_trans is None or noise_trans <= 0):
+            raise ValueError("noise transformation has to be greater than 0")
+        self.noise_trans = noise_trans
 
-        for obj in obj_list:
-            if mode == 'train':
-                index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'train.txt')
-            else:
-                index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'test.txt')
-            file = open(index_file)
-            index_list = [line.rstrip() for line in file]   # get rid of '\n' in each line, elements are of str
-
-            gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
-            info_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'info.yml')
-            ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj).zfill(2) + '.ply')
-            models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
-
-            # read model diameter
-            models_info_yml = yaml.load(open(models_info_path))
-            self.diameter_dict[obj] = models_info_yml[obj]['diameter']
-
-            # read vertexes of model from ply file
-            vtx = read_ply_vtx(ply_path)
-            self.vtx_dict[obj] = vtx
-            # read ground truth to gt_dict
-#             self.gt_dict[obj] = yaml.load(gt_path, Loader=yaml.CLoader)
-            self.gt_dict[obj] = yaml.load(open(gt_path))
-
-            for index in index_list:
-                rgb_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'rgb', index+'.png')
-                depth_path = os.path.join(dataset_path, 'data', str(obj).zfill(2),  'depth', index+'.png')
-                if mode == 'eval':
-                    label_path = os.path.join(dataset_path, 'segnet_results', str(obj).zfill(2)+'_label', index+'_label.png')
-                else:
-                    label_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'mask', index+'.png')
-
-                self.obj_list.append(obj)
-                self.index_list.append(int(index))
-                self.rgb_list.append(rgb_path)
-                self.depth_list.append(depth_path)
-                self.label_list.append(label_path)
-
-        self.cam_cx = 325.26110
-        self.cam_cy = 242.04899
-        self.cam_fx = 572.41140
-        self.cam_fy = 573.57043
-
-        self.xmap = np.array([[i for i in range(640)] for j in range(480)])
-        self.ymap = np.array([[j for i in range(640)] for j in range(480)])
-
-        self.num_pt_mesh = 500
-
+        # transformations applied to the image
+        # only applied if noise is added
         self.trancolor = transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)
+        # always applied
         self.transform = transforms.Compose([transforms.ToTensor(),
                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                   std=[0.229, 0.224, 0.225])])
 
-    def __getitem__(self, item):
-        # read rgb img, depth img and mask
-        rgb_img = np.array(Image.open(self.rgb_list[item]))
-        depth_img = np.array(Image.open(self.depth_list[item]))
-        label_img = np.array(Image.open(self.label_list[item]))
+        if num_points <= 0 or num_points_model <= 0:
+            raise ValueError("number of points has to be greater than 0")
+        # number of points sampled for the object
+        self.num_points = num_points
+        # number of points sampled for the object model
+        self.num_points_model = num_points_model
 
-        obj_id = self.obj_list[item]
-        img_id = self.index_list[item]
+        # path to the directory where the data is stored
+        self.dataset_dir = dataset_dir
+        if not os.path.isdir(self.dataset_dir):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), dataset_dir)
 
-        # get ground truth parameters from self.gt_dict
-        if obj_id == 2:
-            for each_dict in self.gt_dict[obj_id][img_id]:
-                if each_dict['obj_id'] == 2:
-                    gt = each_dict
-                    break
+        # camera parameters:
+        # (from the camera.json from the original linemod dataset (https://bop.felk.cvut.cz/datasets/))
+        # these are the same for all images
+        self.cx = 325.2611
+        self.cy = 242.04899
+        # depth_scale multiplied with the depth image gives depth in mm
+        self.depth_scale = 1.0
+        self.fx = 572.4114
+        self.fy = 573.57043
+        self.height = 480
+        self.width = 640
+
+        # there are 13 objects in the available linemod dataset
+        self.objects = [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]
+        # ids of the symmetric objects
+        self.symmetric_objects = [7, 8]
+
+        # all object ids (list with as many entries as there are images)
+        self.obj_ids = []
+        # images are named with numbers, this contains all numbers of the available images
+        self.image_ids = []
+
+        self.model_to_camera_rotation = []  # rotation matrix from model to camera coordinates
+        self.model_to_camera_translation = []  # translation from model to camera coordinates
+        # bounding boxes (x_min, x_max, y_min, y_max)
+        self.obj_bb = []
+
+        # vertex points of each model, keys are the object id
+        self.model_points = {}
+
+        # diameter of each object model
+        self.model_diameter = {}
+        with open(os.path.join(self.dataset_dir, "models/models_info.yml"), "r") as f:
+            model_info = yaml.safe_load(f)
+            for obj_id in self.objects:
+                # divide by 1000 to get meters as unit
+                self.model_diameter[obj_id] = model_info[obj_id]["diameter"] / 1000
+
+        if self.mode == "train":
+            get_split_image_ids_path = lambda object_id: (os.path.join(self.dataset_dir,
+                                                                       f"data/{object_id:02d}/train.txt"))
         else:
-            gt = self.gt_dict[obj_id][img_id][0]
+            get_split_image_ids_path = lambda object_id: (os.path.join(self.dataset_dir,
+                                                                       f"data/{object_id:02d}/test.txt"))
 
-        # output a point cloud
-        depth_mask = np.ma.getmaskarray(np.ma.masked_not_equal(depth_img, 0))    # mask non-zero as True
-        if self.mode == 'eval':
-            label_mask = np.ma.getmaskarray(np.ma.masked_equal(label_img, np.array(255)))   # mask 255 as True
-        else:
-            # mask 255，255，255 as True, since the img has 3 channel
-            label_mask = np.ma.getmaskarray(np.ma.masked_equal(label_img, np.array([255, 255, 255])))[:, :, 0]
-        mask = label_mask * depth_mask
+        get_meta_info_path = lambda object_id: (os.path.join(self.dataset_dir, f"data/{object_id:02}/gt.yml"))
+        get_model_path = lambda object_id: (os.path.join(self.dataset_dir, f"models/obj_{object_id:02}.ply"))
 
-        # get the bounding box and crop img
-        rmin, rmax, cmin, cmax = get_bb(gt['obj_bb'])
-        img_crop = rgb_img[rmin:rmax, cmin:cmax, :]
+        for obj_id in self.objects:
 
-        # select cloud_pt_num points to make a point cloud
-        choice = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]  # nonzero returns a tuple
-        if len(choice) == 0:
-            return None, None, None, None, None, None
-        if len(choice) > self.cloud_pt_num:
-            # randomly select cloud_pt_num points
-            choice = np.random.choice(choice, self.cloud_pt_num, replace=False)
-        # repeat points if not enough
-        else:
-            choice = np.pad(choice, (0, self.cloud_pt_num - len(choice)), 'wrap')
+            temp_image_ids = pd.read_csv(get_split_image_ids_path(obj_id), header=None).squeeze("columns").tolist()
+            for temp_image_id in temp_image_ids:
+                self.image_ids.append(temp_image_id)
+                self.obj_ids.append(obj_id)
 
-        depth_points = depth_img[rmin:rmax, cmin:cmax].flatten()[choice].reshape(-1, 1)
-        x_points = self.xmap[rmin:rmax, cmin:cmax].flatten()[choice].reshape(-1, 1)
-        y_points = self.ymap[rmin:rmax, cmin:cmax].flatten()[choice].reshape(-1, 1)
-        choice = np.array([choice])
+            # load meta info (target rotation, target translation, bounding boxes)
+            with open(get_meta_info_path(obj_id), "r") as f:
+                all_meta_info = yaml.safe_load(f)
+            for image_id in temp_image_ids:
+                if obj_id == 2:
+                    # the gt.yml file for object id 2 contains info on multiple objects for each image,
+                    # so it needs special treatment
+                    meta_info = all_meta_info[image_id]  # list of dicts
+                    # search for dict with info for object id 2
+                    meta_info = next(item for item in meta_info if item["obj_id"] == 2)
+                else:
+                    # dict containing cam_R_m2c, cam_t_m2c, obj_bb, obj_id
+                    meta_info = all_meta_info[image_id][0]
+                self.model_to_camera_rotation.append(meta_info["cam_R_m2c"])
+                self.model_to_camera_translation.append(meta_info["cam_t_m2c"])  # has unit mm
+                x_min, y_min, width, height = meta_info["obj_bb"]
+                self.obj_bb.append([x_min, x_min + width, y_min, y_min + height])
 
-        pt2 = depth_points / 1000
-        pt0 = (x_points - self.cam_cx) * pt2 / self.cam_fx
-        pt1 = (y_points - self.cam_cy) * pt2 / self.cam_fy
-        cloud = np.hstack((pt0, pt1, pt2))
+            # load object model
+            with open(get_model_path(obj_id), "r") as f:
+                # skip the first 3 lines
+                for _ in range(3):
+                    f.readline()
+                # number of vertices (= number of model points)
+                n_points = int(f.readline().split(" ")[-1])
 
-        # get ground truth rotation and translation
-        target_rotation = np.resize(np.array(gt['cam_R_m2c']), (3, 3))
-        target_translation = np.array(gt['cam_t_m2c']) / 1000
+                # header is 17 rows long, but we only need to skip 13 rows because we already read 4
+                # first 3 columns are the x, y and z coordinates of the vertices
+                model_points = pd.read_csv(f, header=None, sep=" ", skiprows=13, nrows=n_points,
+                                           usecols=[0, 1, 2]).to_numpy()
+                self.model_points[obj_id] = model_points / 1000  # divide by 1000 to get meters as unit
 
-        gt_translation = target_translation
-        target_translation = target_translation - cloud
-        target_translation = target_translation / np.linalg.norm(target_translation, axis=1).reshape(-1, 1)
-
-        model_vtx = self.vtx_dict[obj_id] / 1000.0
-        vtx_choice = np.random.choice(len(model_vtx), self.num_pt_mesh, replace=False)
-        model_vtx = model_vtx[vtx_choice, :]
-        target_rotation = np.dot(model_vtx, target_rotation.T)
-
-        return (torch.from_numpy(cloud.astype(np.float32)),
-                torch.LongTensor(choice.astype(np.int32)),
-                self.transform(img_crop),
-                torch.from_numpy(target_translation.astype(np.float32)),
-                torch.from_numpy(target_rotation.astype(np.float32)),
-                torch.from_numpy(model_vtx.astype(np.float32)),
-                torch.LongTensor([self.objects.index(obj_id)]),
-                torch.from_numpy(gt_translation.astype(np.float32)))
+            self.x_points = np.array([[i for i in range(self.width)] for j in range(self.height)])
+            self.y_points = np.array([[j for i in range(self.width)] for j in range(self.height)])
 
     def __len__(self):
-       return len(self.rgb_list)
+        return len(self.image_ids)
 
-    def get_sym_list(self):
-        return self.sym_obj
+    def get_rgb_path(self, object_id, image_id):
+        # returns path to the rgb image given object id and image id
+        # (image id is the index of the image within the folder of objects)
+        return os.path.join(self.dataset_dir, f"data/{object_id:02d}/rgb/{image_id:04d}.png")
 
-    def get_obj_diameter(self, obj_id):
-        if obj_id not in self.diameter_dict:
-            return None
+    def get_depth_path(self, object_id, image_id):
+        # returns path to the depth image
+        return os.path.join(self.dataset_dir, f"data/{object_id:02d}/depth/{image_id:04d}.png")
+
+    def get_mask_path(self, object_id, image_id):
+        if self.mode == "eval":
+            return os.path.join(self.dataset_dir, f"segnet_results/{object_id:02d}_label/{image_id:04d}_label.png")
         else:
-            return self.diameter_dict[obj_id]
+            return os.path.join(self.dataset_dir, f"data/{object_id:02d}/mask/{image_id:04d}.png")
 
+    def __getitem__(self, idx):
+        obj_id = self.obj_ids[idx]
+        image_id = self.image_ids[idx]
+        img = Image.open(self.get_rgb_path(obj_id, image_id))
+        if self.add_noise:
+            img = self.trancolor(img)
+        depth = np.array(
+            Image.open(self.get_depth_path(obj_id, image_id))) / 1000  # divide by 1000 to get meters as unit
+        mask = np.array(Image.open(self.get_mask_path(obj_id, image_id)))
 
-def read_ply_vtx(filepath):
-    """
-    get the vertexes of a model
-    :param filepath: the path of ply file
-    :return: an array of size (num_vtx, 3)
-    """
-    f = open(filepath)
-    assert f.readline().strip() == "ply"
-    f.readline()
-    f.readline()
-    N = int(f.readline().split()[-1])
-    while f.readline().strip() != "end_header":
-        continue
-    pts = []
-    for _ in range(N):
-        pts.append(np.float32(f.readline().split()[:3]))
-    return np.array(pts)
+        # mask where depth measurement is valid (not equal to 0)
+        mask_depth = ma.getmaskarray(ma.masked_not_equal(depth, 0))
 
+        if self.mode == "eval":
+            mask_label = ma.getmaskarray(ma.masked_equal(mask, np.array(255)))
+        else:
+            # mask where mask of object is valid
+            mask_label = ma.getmaskarray(ma.masked_equal(mask, np.array([255, 255, 255])))[:, :, 0]
 
-def get_bb(bbox):
-    border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
-    bbx = [bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]]
-    if bbx[0] < 0:
-        bbx[0] = 0
-    if bbx[1] >= 480:
-        bbx[1] = 479
-    if bbx[2] < 0:
-        bbx[2] = 0
-    if bbx[3] >= 640:
-        bbx[3] = 639
-    rmin, rmax, cmin, cmax = bbx[0], bbx[1], bbx[2], bbx[3]
-    r_b = rmax - rmin
-    for tt in range(len(border_list)):
-        if r_b > border_list[tt] and r_b < border_list[tt + 1]:
-            r_b = border_list[tt + 1]
-            break
-    c_b = cmax - cmin
-    for tt in range(len(border_list)):
-        if c_b > border_list[tt] and c_b < border_list[tt + 1]:
-            c_b = border_list[tt + 1]
-            break
-    center = [int((rmin + rmax) / 2), int((cmin + cmax) / 2)]
-    rmin = center[0] - int(r_b / 2)
-    rmax = center[0] + int(r_b / 2)
-    cmin = center[1] - int(c_b / 2)
-    cmax = center[1] + int(c_b / 2)
-    if rmin < 0:
-        delt = -rmin
-        rmin = 0
-        rmax += delt
-    if cmin < 0:
-        delt = -cmin
-        cmin = 0
-        cmax += delt
-    if rmax > 480:
-        delt = rmax - 480
-        rmax = 480
-        rmin -= delt
-    if cmax > 640:
-        delt = cmax - 640
-        cmax = 640
-        cmin -= delt
-    return rmin, rmax, cmin, cmax
+        # combined mask of original mask and depth mask
+        mask = mask_label * mask_depth
+
+        # bounding box boundaries
+        x_min, x_max, y_min, y_max = self.obj_bb[idx]
+        # image cropped to bounding box
+        # y corresponds to the row index and x to the column index
+        img_cropped = np.array(img)[y_min:y_max, x_min:x_max, :3]
+        # indices where the cropped mask is valid
+        mask_indices_cropped = mask[y_min:y_max, x_min:x_max].flatten().nonzero()[0]
+
+        # return all zero vector if there is no valid point
+        if len(mask_indices_cropped) == 0:
+            cc = torch.LongTensor([0])
+            return cc, cc, cc, cc, cc, cc
+        # downsample points by selecting as many points as needed randomly if there are too many points
+        if len(mask_indices_cropped) > self.num_points:
+            c_mask = np.zeros(len(mask_indices_cropped), dtype=int)
+            c_mask[:self.num_points] = 1
+            np.random.shuffle(c_mask)
+            mask_indices_cropped = mask_indices_cropped[c_mask.nonzero()]
+        # repeat points if there are not enough points
+        else:
+            mask_indices_cropped = np.pad(mask_indices_cropped, (0, self.num_points - len(mask_indices_cropped)),
+                                          'wrap')
+
+        # depth, x and y points at the locations where the object is according to the mask
+        depth_masked = depth[y_min:y_max, x_min:x_max].flatten()[mask_indices_cropped][:, np.newaxis].astype(np.float32)
+        x_points_masked = self.x_points[y_min:y_max, x_min:x_max].flatten()[mask_indices_cropped][:, np.newaxis].astype(
+            np.float32)
+        y_points_masked = self.y_points[y_min:y_max, x_min:x_max].flatten()[mask_indices_cropped][:, np.newaxis].astype(
+            np.float32)
+
+        # transform image coordinates to camera coordinates
+        z_camera_coord = depth_masked
+        x_camera_coord = (x_points_masked - self.cx) * z_camera_coord / self.fx
+        y_camera_coord = (y_points_masked - self.cy) * z_camera_coord / self.fy
+        # object points in camera coordinates
+        object_point_cloud = np.concatenate((x_camera_coord, y_camera_coord, z_camera_coord), axis=1)
+
+        model_to_camera_rotation = np.array(self.model_to_camera_rotation[idx]).reshape((3, 3))
+        # divide by 1000 to get meters as unit
+        model_to_camera_translation = np.array(self.model_to_camera_translation[idx]) / 1000
+
+        if self.add_noise:
+            uniform_noise = np.random.uniform(-self.noise_trans, self.noise_trans, (1, 3))
+            # add noise to translation vector
+            model_to_camera_translation = model_to_camera_translation + uniform_noise
+            # add noise to object point cloud
+            object_point_cloud = object_point_cloud + uniform_noise + \
+                                 np.clip(0.001 * np.random.randn(object_point_cloud.shape[0], 3), -0.005, 0.005)
+
+        # unit vector pointing from each object point to the object center
+        point_to_center = model_to_camera_translation - object_point_cloud
+        point_to_center = point_to_center / np.linalg.norm(point_to_center, axis=1)[:, None]
+
+        # model points in model coordinates
+        model_points = self.model_points[obj_id]
+        # downsample model points
+
+        # downsample model points by selecting as many points as needed randomly
+        dellist = [j for j in range(0, len(model_points))]
+        dellist = random.sample(dellist, len(model_points) - self.num_points_model)
+        model_points = np.delete(model_points, dellist, axis=0)
+
+        # model points in camera coordinates
+        model_points_camera_coord = np.dot(model_points, model_to_camera_rotation.T)
+
+        return torch.from_numpy(object_point_cloud.astype(np.float32)), \
+               torch.LongTensor(np.array([mask_indices_cropped]).astype(np.int32)), \
+               self.transform(img_cropped), \
+               torch.from_numpy(point_to_center.astype(np.float32)), \
+               torch.from_numpy(model_points_camera_coord.astype(np.float32)), \
+               torch.from_numpy(model_points.astype(np.float32)), \
+               torch.LongTensor([self.objects.index(obj_id)]), \
+               torch.from_numpy(model_to_camera_translation.astype(np.float32))
+
+    def get_model_diameter(self, obj_id):
+        return self.model_diameter.get(obj_id, None)
