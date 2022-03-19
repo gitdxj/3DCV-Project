@@ -15,7 +15,7 @@ class PoseNet(nn.Module):
 
         # TODO: sample rotation
 
-        self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18')
+        self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
         # convolution layer for edge features
         self.edge_conv1 = Conv2d(6, 64, 1)
@@ -49,8 +49,6 @@ class PoseNet(nn.Module):
         self.conv2_c = Conv1d(512, 256, 1)
         self.conv3_c = Conv1d(256, 128, 1)
         self.conv4_c = Conv1d(128, self.obj_num * self.rot_num * 1, 1)
-
-
 
     def forward(self, img_crop, cloud, choice, obj_idx):
         """
@@ -129,9 +127,6 @@ class PoseNet(nn.Module):
         # TODO: select prediction
 
         return t_x, r_x, c_x
-
-
-
 
     def get_nn_idx(self, cloud):
         """
