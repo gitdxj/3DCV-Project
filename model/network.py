@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 from torch.nn import Conv2d, Conv1d
 import torch.nn.functional as F
+import numpy as np
 from psp.pspnet import PSPNet
+from lib.transformations import quaternion_from_matrix
 
 
 class PoseNet(nn.Module):
-    def __init__(self, cloud_pt_num, obj_num, rot_num, k=16):
+    def __init__(self, cloud_pt_num, obj_num, rot_num=12, k=16):
         super(PoseNet, self).__init__()
         self.cloud_pt_num = cloud_pt_num
         self.obj_num = obj_num
@@ -14,6 +16,7 @@ class PoseNet(nn.Module):
         self.k = k
 
         # TODO: sample rotation
+        self.rot_anchors = sample_rotations_12()
 
         self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
@@ -126,7 +129,24 @@ class PoseNet(nn.Module):
 
         # TODO: select prediction
 
-        return t_x, r_x, c_x
+        out_tx = torch.index_select(t_x[0], 0, obj_idx[0])
+        out_tx = out_tx.contiguous().transpose(2, 1).contiguous()
+
+        out_cx = torch.index_select(c_x[0], 0, obj_idx[0])  # 1 x rot_num
+
+        out_rx = torch.index_select(r_x[0], 0, obj_idx[0])  # 1 x rot_num x 4
+        out_rx = F.normalize(out_rx, p=2, dim=2)  # 1 x rot_num x 4
+        rot_anchors = torch.from_numpy(self.rot_anchors).float().cuda()
+        rot_anchors = torch.unsqueeze(torch.unsqueeze(rot_anchors, dim=0), dim=3)  # 1 x rot_num x 4 x 1
+        out_rx = torch.unsqueeze(out_rx, 2)  # 1 x rot_num x 1 x 4
+        out_rx = torch.cat((out_rx[:, :, :, 0], -out_rx[:, :, :, 1], -out_rx[:, :, :, 2], -out_rx[:, :, :, 3], \
+                            out_rx[:, :, :, 1], out_rx[:, :, :, 0], out_rx[:, :, :, 3], -out_rx[:, :, :, 2], \
+                            out_rx[:, :, :, 2], -out_rx[:, :, :, 3], out_rx[:, :, :, 0], out_rx[:, :, :, 1], \
+                            out_rx[:, :, :, 3], out_rx[:, :, :, 2], -out_rx[:, :, :, 1], out_rx[:, :, :, 0], \
+                            ), dim=2).contiguous().view(1, self.num_rot, 4, 4)
+        out_rx = torch.squeeze(torch.matmul(out_rx, rot_anchors), dim=3)
+
+        return out_rx, out_tx, out_cx
 
     def get_nn_idx(self, cloud):
         """
@@ -167,6 +187,27 @@ class PoseNet(nn.Module):
         edge_feat = torch.cat((central, neighbors - central), dim=1)  # shape: 1 x 2c x 500 x k
 
         return edge_feat
+
+
+def sample_rotations_12():
+    group = np.array([[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                      [[1, 0, 0], [0, -1, 0], [0, 0, -1]],
+                      [[-1, 0, 0], [0, 1, 0], [0, 0, -1]],
+                      [[-1, 0, 0], [0, -1, 0], [0, 0, 1]],
+
+                      [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
+                      [[0, 1, 0], [0, 0, -1], [-1, 0, 0]],
+                      [[0, -1, 0], [0, 0, 1], [-1, 0, 0]],
+                      [[0, -1, 0], [0, 0, -1], [1, 0, 0]],
+
+                      [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
+                      [[0, 0, 1], [-1, 0, 0], [0, -1, 0]],
+                      [[0, 0, -1], [1, 0, 0], [0, -1, 0]],
+                      [[0, 0, -1], [-1, 0, 0], [0, 1, 0]]])
+    quaternion_group = np.zeros((12, 4))
+    for i in range(12):
+        quaternion_group[i] = quaternion_from_matrix(group[i])
+    return quaternion_group.astype(float)
 
 
 
