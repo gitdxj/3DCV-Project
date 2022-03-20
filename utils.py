@@ -1,12 +1,20 @@
 from dataset import LinemodDataset
 import torch
 from torch.autograd import Variable
-from torch.utils.tensorboard import SummaryWriter
-
+# from torch.utils.tensorboard import SummaryWriter
+import tensorflow as tf
 from loss import Loss
 from model.network import PoseNet
 
 RECORD_AFTER_EVERY = 100
+
+def record_train_metric(writer, train_loss, r_loss, t_loss, reg_loss, step):
+    summary = tf.Summary(value=[tf.Summary.Value(tag='train_loss', simple_value=train_loss / RECORD_AFTER_EVERY),
+                                tf.Summary.Value(tag='r_loss', simple_value=r_loss / RECORD_AFTER_EVERY),
+                                tf.Summary.Value(tag='t_loss', simple_value=t_loss / RECORD_AFTER_EVERY),
+                                tf.Summary.Value(tag='reg_loss', simple_value=reg_loss / RECORD_AFTER_EVERY)])
+    writer.add_summary(summary, step)
+
 
 
 def train_linemod(epochs):
@@ -28,7 +36,8 @@ def train_linemod(epochs):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     # record losses on tensorboard
-    writer = SummaryWriter()
+    # writer = SummaryWriter()
+    writer = tf.summary.FileWriter('./results')
 
     current_steps = 0
 
@@ -76,10 +85,11 @@ def train_linemod(epochs):
                 optimizer.zero_grad()
 
                 # show the loss on tensorboard every a certain number of batches
-                writer.add_scalar('Loss/train', train_loss/RECORD_AFTER_EVERY, current_steps)
-                writer.add_scalar('Loss/r_loss', r_loss/RECORD_AFTER_EVERY, current_steps)
-                writer.add_scalar('Loss/t_loss', t_loss/RECORD_AFTER_EVERY, current_steps)
-                writer.add_scalar('Loss/reg_loss', reg_loss/RECORD_AFTER_EVERY, current_steps)
+                # writer.add_scalar('Loss/train', train_loss/RECORD_AFTER_EVERY, current_steps)
+                # writer.add_scalar('Loss/r_loss', r_loss/RECORD_AFTER_EVERY, current_steps)
+                # writer.add_scalar('Loss/t_loss', t_loss/RECORD_AFTER_EVERY, current_steps)
+                # writer.add_scalar('Loss/reg_loss', reg_loss/RECORD_AFTER_EVERY, current_steps)
+                record_train_metric(writer, train_loss, r_loss, t_loss, reg_loss, current_steps)
 
                 # reset the loss
                 train_loss = 0
