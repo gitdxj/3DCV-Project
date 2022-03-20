@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.nn import Conv2d, Conv1d
 import torch.nn.functional as F
 import numpy as np
-from psp.pspnet import PSPNet
+from model.psp.pspnet import PSPNet
 from lib.transformations import quaternion_from_matrix
 
 
