@@ -116,7 +116,7 @@ class LinemodDataset(data.Dataset):
         # select cloud_pt_num points to make a point cloud
         choice = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]  # nonzero returns a tuple
         if len(choice) == 0:
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None
         if len(choice) > self.cloud_pt_num:
             # randomly select cloud_pt_num points
             choice = np.random.choice(choice, self.cloud_pt_num, replace=False)
@@ -157,16 +157,13 @@ class LinemodDataset(data.Dataset):
                 torch.from_numpy(gt_translation.astype(np.float32)))
 
     def __len__(self):
-       return len(self.rgb_list)
+        return len(self.rgb_list)
 
     def get_sym_list(self):
         return self.sym_obj
 
     def get_obj_diameter(self, obj_id):
-        if obj_id not in self.diameter_dict:
-            return None
-        else:
-            return self.diameter_dict[obj_id]
+        return self.diameter_dict.get(obj_id, None)
 
 
 def read_ply_vtx(filepath):
