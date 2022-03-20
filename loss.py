@@ -83,7 +83,7 @@ def loss_calculation(pred_r, pred_t, pred_c, target_r, target_t, model_points, i
     target_r = target_r.unsqueeze(1).repeat(1, num_rotations, 1, 1).contiguous().view(batch_size * num_rotations,
                                                                                       num_points_model, 3)
 
-    shape_match_loss = torch.empty((batch_size, num_rotations))  # stores the ShapeMatch loss for each predicted rotation
+    shape_match_loss = torch.empty((batch_size, num_rotations)).cuda()  # stores the ShapeMatch loss for each predicted rotation
 
     # compute the ShapeMatch loss for each element of the batch
     for batch_idx, obj_idx in enumerate(idx):

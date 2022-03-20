@@ -16,7 +16,8 @@ class PoseNet(nn.Module):
         self.k = k
 
         # TODO: sample rotation
-        self.rot_anchors = torch.Tensor(sample_rotations_12()).cuda()
+#         self.rot_anchors = torch.Tensor(sample_rotations_12()).cuda()
+        self.rot_anchors = sample_rotations_12()
 
         self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
