@@ -28,6 +28,7 @@ def train_linemod(epochs):
 
     # model
     model = PoseNet(cloud_pt_num=500, obj_num=13, rot_num=12)
+    model.cuda()
 
     # loss func
     criterion = Loss(sym_list=[7, 8], rot_anchors=model.rot_anchors)
@@ -41,7 +42,7 @@ def train_linemod(epochs):
 
     current_steps = 0
 
-    for epoch in epochs:
+    for epoch in range(epochs):
         # initialize record parameters
         train_loss = 0
         train_r_loss = 0

@@ -16,7 +16,7 @@ class PoseNet(nn.Module):
         self.k = k
 
         # TODO: sample rotation
-        self.rot_anchors = sample_rotations_12()
+        self.rot_anchors = torch.Tensor(sample_rotations_12()).cuda()
 
         self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
@@ -143,7 +143,7 @@ class PoseNet(nn.Module):
                             out_rx[:, :, :, 1], out_rx[:, :, :, 0], out_rx[:, :, :, 3], -out_rx[:, :, :, 2], \
                             out_rx[:, :, :, 2], -out_rx[:, :, :, 3], out_rx[:, :, :, 0], out_rx[:, :, :, 1], \
                             out_rx[:, :, :, 3], out_rx[:, :, :, 2], -out_rx[:, :, :, 1], out_rx[:, :, :, 0], \
-                            ), dim=2).contiguous().view(1, self.num_rot, 4, 4)
+                            ), dim=2).contiguous().view(1, self.rot_num, 4, 4)
         out_rx = torch.squeeze(torch.matmul(out_rx, rot_anchors), dim=3)
 
         return out_rx, out_tx, out_cx
