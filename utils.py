@@ -3,6 +3,9 @@ import torch
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
+from loss import Loss
+from model.network import PoseNet
+
 RECORD_AFTER_EVERY = 100
 
 
@@ -16,10 +19,10 @@ def train_linemod(epochs):
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False)
 
     # model
-    model = ...
+    model = PoseNet(cloud_pt_num=500, obj_num=13, rot_num=12)
 
     # loss func
-    criterion = ...
+    criterion = Loss(sym_list=[7, 8], rot_anchors=model.rot_anchors)
 
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -84,6 +87,31 @@ def train_linemod(epochs):
                 train_t_loss = 0
                 train_reg_loss = 0
         print("epoch ", epoch, "train finish")
+
+        # # evaluation
+        #
+        # model.eval()  # set model to evaluation mode
+        #
+        # for i, data in enumerate(test_loader, 0):
+        #     cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
+        #     cloud = Variable(cloud).cuda()          # shape: 500, 3
+        #     choice = Variable(choice).cuda()        # shape: 1, 500
+        #     img_crop = Variable(img_crop).cuda()    # shape: 3, 80, 80
+        #     target_t = Variable(target_t).cuda()    # shape: 500, 3
+        #     target_r = Variable(target_r).cuda()    # shape: 500, 3
+        #     model_vtx = Variable(model_vtx).cuda()  # shape: 500, 3
+        #     obj_idx = Variable(obj_idx).cuda()      # shape: 1
+        #     gt_t = Variable(gt_t).cuda()            # shape: 3
+        #
+        #     obj_diameter = train_set.diameter_dict[train_set.objects[obj_idx]]
+        #
+        #     # prediction
+        #     pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
+        #     # loss
+        #     loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, cloud, obj_idx, obj_diameter)
+        #
+        #     min_val, min_idx = torch.min(pred_c, dim=1)
+
 
 
 
