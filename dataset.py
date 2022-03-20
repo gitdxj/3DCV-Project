@@ -11,7 +11,7 @@ import yaml
 
 class LinemodDataset(data.Dataset):
     def __init__(self, mode, dataset_path, cloud_pt_num, obj_list=[1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]):
-        self.mode = mode
+        self.mode = mode          # either 'train', 'test' or 'eval'
         self.objects = obj_list
         self.cloud_pt_num = cloud_pt_num
         self.sym_obj = [7, 8]
@@ -23,43 +23,38 @@ class LinemodDataset(data.Dataset):
         self.index_list = []      # img index
         self.diameter_dict = dict()   # model diameters
         self.gt_dict = dict()          # ground truth: rotation, translation and bb
-        self.vtx_dict = dict()         # vertexes of models read from ply file
-
-        model_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
-#         self.model_info_dict = yaml.load(open(model_info_path), Loader=yaml.CLoader)   # key: obj_index, val: dict
-        self.model_info_dict = yaml.load(open(model_info_path))
+        self.vtx_dict = dict()         # vertices of models read from ply file
 
         for obj in obj_list:
             if mode == 'train':
                 index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'train.txt')
             else:
                 index_file = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'test.txt')
-            file = open(index_file)
-            index_list = [line.rstrip() for line in file]   # get rid of '\n' in each line, elements are of str
+            with open(index_file, 'r') as file:
+                index_list = [line.rstrip() for line in file]  # get rid of '\n' in each line, elements are of str
 
             gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
-            info_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'info.yml')
             ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj).zfill(2) + '.ply')
             models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
 
             # read model diameter
-            models_info_yml = yaml.load(open(models_info_path))
+            models_info_yml = yaml.safe_load(open(models_info_path))
             self.diameter_dict[obj] = models_info_yml[obj]['diameter']
 
             # read vertexes of model from ply file
             vtx = read_ply_vtx(ply_path)
             self.vtx_dict[obj] = vtx
             # read ground truth to gt_dict
-#             self.gt_dict[obj] = yaml.load(gt_path, Loader=yaml.CLoader)
-            self.gt_dict[obj] = yaml.load(open(gt_path))
+            self.gt_dict[obj] = yaml.safe_load(open(gt_path))
 
             for index in index_list:
-                rgb_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'rgb', index+'.png')
-                depth_path = os.path.join(dataset_path, 'data', str(obj).zfill(2),  'depth', index+'.png')
+                rgb_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'rgb', index + '.png')
+                depth_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'depth', index + '.png')
                 if mode == 'eval':
-                    label_path = os.path.join(dataset_path, 'segnet_results', str(obj).zfill(2)+'_label', index+'_label.png')
+                    label_path = os.path.join(dataset_path, 'segnet_results', str(obj).zfill(2) + '_label',
+                                              index + '_label.png')
                 else:
-                    label_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'mask', index+'.png')
+                    label_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'mask', index + '.png')
 
                 self.obj_list.append(obj)
                 self.index_list.append(int(index))
@@ -77,16 +72,20 @@ class LinemodDataset(data.Dataset):
 
         self.num_pt_mesh = 500
 
-        self.trancolor = transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)
+        self.trancolor = transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)  # used for data augmentation in train mode
         self.transform = transforms.Compose([transforms.ToTensor(),
                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                   std=[0.229, 0.224, 0.225])])
 
     def __getitem__(self, item):
         # read rgb img, depth img and mask
-        rgb_img = np.array(Image.open(self.rgb_list[item]))
+        rgb_img = Image.open(self.rgb_list[item])
         depth_img = np.array(Image.open(self.depth_list[item]))
         label_img = np.array(Image.open(self.label_list[item]))
+
+        if self.mode == 'train':
+            rgb_img = self.trancolor(rgb_img)
+        rgb_img = np.array(rgb_img)
 
         obj_id = self.obj_list[item]
         img_id = self.index_list[item]
@@ -101,9 +100,9 @@ class LinemodDataset(data.Dataset):
             gt = self.gt_dict[obj_id][img_id][0]
 
         # output a point cloud
-        depth_mask = np.ma.getmaskarray(np.ma.masked_not_equal(depth_img, 0))    # mask non-zero as True
+        depth_mask = np.ma.getmaskarray(np.ma.masked_not_equal(depth_img, 0))  # mask non-zero as True
         if self.mode == 'eval':
-            label_mask = np.ma.getmaskarray(np.ma.masked_equal(label_img, np.array(255)))   # mask 255 as True
+            label_mask = np.ma.getmaskarray(np.ma.masked_equal(label_img, np.array(255)))  # mask 255 as True
         else:
             # mask 255，255，255 as True, since the img has 3 channel
             label_mask = np.ma.getmaskarray(np.ma.masked_equal(label_img, np.array([255, 255, 255])))[:, :, 0]
@@ -137,6 +136,15 @@ class LinemodDataset(data.Dataset):
         # get ground truth rotation and translation
         target_rotation = np.resize(np.array(gt['cam_R_m2c']), (3, 3))
         target_translation = np.array(gt['cam_t_m2c']) / 1000
+
+        if self.mode == 'train':
+            # add random noise to target translation and point cloud (data augmentation)
+            # shift
+            add_t = np.random.uniform(-0.01, 0.01, (1, 3))
+            target_translation = target_translation + add_t
+            # jittering
+            add_t = add_t + np.clip(0.001 * np.random.randn(cloud.shape[0], 3), -0.005, 0.005)
+            cloud = np.add(cloud, add_t)
 
         gt_translation = target_translation
         target_translation = target_translation - cloud
