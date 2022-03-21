@@ -39,7 +39,7 @@ class LinemodDataset(data.Dataset):
 
             # read model diameter
             models_info_yml = yaml.safe_load(open(models_info_path))
-            self.diameter_dict[obj] = models_info_yml[obj]['diameter']
+            self.diameter_dict[obj] = models_info_yml[obj]['diameter'] / 1000
 
             # read vertexes of model from ply file
             vtx = read_ply_vtx(ply_path)
