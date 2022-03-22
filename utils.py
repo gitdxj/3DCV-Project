@@ -70,7 +70,7 @@ def train_linemod(epochs):
             pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
 
             # compute loss
-            loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, cloud, obj_idx, obj_diameter)
+            loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, model_vtx, obj_idx, obj_diameter)
 
             loss.backward()
 
