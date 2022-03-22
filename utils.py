@@ -5,8 +5,10 @@ from torch.autograd import Variable
 import tensorflow as tf
 from loss import Loss
 from model.network import PoseNet
+import time
 
-RECORD_AFTER_EVERY = 100
+RECORD_AFTER_EVERY = 50
+
 
 def record_train_metric(writer, train_loss, r_loss, t_loss, reg_loss, step):
     summary = tf.Summary(value=[tf.Summary.Value(tag='train_loss', simple_value=train_loss / RECORD_AFTER_EVERY),
@@ -14,7 +16,6 @@ def record_train_metric(writer, train_loss, r_loss, t_loss, reg_loss, step):
                                 tf.Summary.Value(tag='t_loss', simple_value=t_loss / RECORD_AFTER_EVERY),
                                 tf.Summary.Value(tag='reg_loss', simple_value=reg_loss / RECORD_AFTER_EVERY)])
     writer.add_summary(summary, step)
-
 
 
 def train_linemod(epochs):
@@ -41,6 +42,8 @@ def train_linemod(epochs):
     writer = tf.summary.FileWriter('./results')
 
     current_steps = 0
+
+    start = time.time()
 
     for epoch in range(epochs):
         # initialize record parameters
@@ -90,14 +93,20 @@ def train_linemod(epochs):
                 # writer.add_scalar('Loss/r_loss', r_loss/RECORD_AFTER_EVERY, current_steps)
                 # writer.add_scalar('Loss/t_loss', t_loss/RECORD_AFTER_EVERY, current_steps)
                 # writer.add_scalar('Loss/reg_loss', reg_loss/RECORD_AFTER_EVERY, current_steps)
-                record_train_metric(writer, train_loss, r_loss, t_loss, reg_loss, current_steps)
+                record_train_metric(writer, train_loss, train_r_loss, train_t_loss, train_reg_loss, current_steps)
 
                 # reset the loss
                 train_loss = 0
                 train_r_loss = 0
                 train_t_loss = 0
                 train_reg_loss = 0
+                print("epoch: ", epoch, "Time:", time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - start)))
         print("epoch ", epoch, "train finish")
+        if epoch % 10 == 0:
+            torch.save(model, './')
+
+    torch.save(model, './')
+
 
         # # evaluation
         #
