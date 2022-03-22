@@ -55,57 +55,57 @@ def train_linemod(epochs):
         # set model to training mode
         model.train()
         optimizer.zero_grad()
+        for _ in range(10):
+            for i, data in enumerate(train_loader, 0):
+                cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
+                cloud = Variable(cloud).cuda()          # shape: 500, 3
+                choice = Variable(choice).cuda()        # shape: 1, 500
+                img_crop = Variable(img_crop).cuda()    # shape: 3, 80, 80
+                target_t = Variable(target_t).cuda()    # shape: 500, 3
+                target_r = Variable(target_r).cuda()    # shape: 500, 3
+                model_vtx = Variable(model_vtx).cuda()  # shape: 500, 3
+                obj_idx = Variable(obj_idx).cuda()      # shape: 1
+                gt_t = Variable(gt_t).cuda()            # shape: 3
 
-        for i, data in enumerate(train_loader, 0):
-            cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
-            cloud = Variable(cloud).cuda()          # shape: 500, 3
-            choice = Variable(choice).cuda()        # shape: 1, 500
-            img_crop = Variable(img_crop).cuda()    # shape: 3, 80, 80
-            target_t = Variable(target_t).cuda()    # shape: 500, 3
-            target_r = Variable(target_r).cuda()    # shape: 500, 3
-            model_vtx = Variable(model_vtx).cuda()  # shape: 500, 3
-            obj_idx = Variable(obj_idx).cuda()      # shape: 1
-            gt_t = Variable(gt_t).cuda()            # shape: 3
+                obj_diameter = train_set.diameter_dict[train_set.objects[obj_idx]]
 
-            obj_diameter = train_set.diameter_dict[train_set.objects[obj_idx]]
+                # predict
+                pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
 
-            # predict
-            pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
+                # compute loss
+                loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, model_vtx, obj_idx, obj_diameter)
 
-            # compute loss
-            loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, model_vtx, obj_idx, obj_diameter)
+                loss.backward()
 
-            loss.backward()
+                current_steps += 1
+                train_loss += loss.item()
+                train_r_loss += r_loss.item()
+                train_t_loss += t_loss.item()
+                train_reg_loss += reg_loss.item()
 
-            current_steps += 1
-            train_loss += loss.item()
-            train_r_loss += r_loss.item()
-            train_t_loss += t_loss.item()
-            train_reg_loss += reg_loss.item()
+                if current_steps % RECORD_AFTER_EVERY == 0:
+                    # backpropagation
+                    optimizer.step()
+                    optimizer.zero_grad()
 
-            if current_steps % RECORD_AFTER_EVERY == 0:
-                # backpropagation
-                optimizer.step()
-                optimizer.zero_grad()
+                    # show the loss on tensorboard every a certain number of batches
+                    # writer.add_scalar('Loss/train', train_loss/RECORD_AFTER_EVERY, current_steps)
+                    # writer.add_scalar('Loss/r_loss', r_loss/RECORD_AFTER_EVERY, current_steps)
+                    # writer.add_scalar('Loss/t_loss', t_loss/RECORD_AFTER_EVERY, current_steps)
+                    # writer.add_scalar('Loss/reg_loss', reg_loss/RECORD_AFTER_EVERY, current_steps)
+                    record_train_metric(writer, train_loss, train_r_loss, train_t_loss, train_reg_loss, current_steps)
 
-                # show the loss on tensorboard every a certain number of batches
-                # writer.add_scalar('Loss/train', train_loss/RECORD_AFTER_EVERY, current_steps)
-                # writer.add_scalar('Loss/r_loss', r_loss/RECORD_AFTER_EVERY, current_steps)
-                # writer.add_scalar('Loss/t_loss', t_loss/RECORD_AFTER_EVERY, current_steps)
-                # writer.add_scalar('Loss/reg_loss', reg_loss/RECORD_AFTER_EVERY, current_steps)
-                record_train_metric(writer, train_loss, train_r_loss, train_t_loss, train_reg_loss, current_steps)
-
-                # reset the loss
-                train_loss = 0
-                train_r_loss = 0
-                train_t_loss = 0
-                train_reg_loss = 0
-                print("epoch: ", epoch, "Time:", time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - start)))
+                    # reset the loss
+                    train_loss = 0
+                    train_r_loss = 0
+                    train_t_loss = 0
+                    train_reg_loss = 0
+                    print("epoch: ", epoch, "Time:", time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - start)))
         print("epoch ", epoch, "train finish")
         if epoch % 10 == 0:
-            torch.save(model, './')
+            torch.save(model, './posenet.pt')
 
-    torch.save(model, './')
+    torch.save(model, './posenet.pt')
 
 
         # # evaluation
