@@ -1,4 +1,3 @@
-from loss import Loss
 import torch
 from model.network import PoseNet
 from utils import train_linemod
