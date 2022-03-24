@@ -221,7 +221,7 @@ def train_linemod2(epochs):
             try:
                 cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
             except:
-                print('No.{0} NOT Pass! Lost detection!'.format(i))
+                print('No.{0} NOT Pass! Lost detection!'.format(j))
                 continue
 
             cloud = Variable(cloud).cuda()  # shape: 500, 3
