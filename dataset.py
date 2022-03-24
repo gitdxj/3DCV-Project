@@ -117,7 +117,7 @@ class LinemodDataset(data.Dataset):
         if len(choice) == 0:
             cc = torch.LongTensor([0])
             return (cc, cc, cc, cc, cc, cc)
-            # return None, None, None, None, None, None, None, None
+#             return None, None, None, None, None, None, None, None
         if len(choice) > self.cloud_pt_num:
             # randomly select cloud_pt_num points
             choice = np.random.choice(choice, self.cloud_pt_num, replace=False)

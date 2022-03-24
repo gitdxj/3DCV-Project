@@ -24,6 +24,8 @@ object_success_count = [0 for _ in range(len(object_list))]
 # counts the number of times each object has been evaluated
 evaluated_objects = [0 for _ in range(len(object_list))]
 
+error_data = 0
+
 model = torch.load(path_to_trained_model)
 model.cuda()
 model.eval()
@@ -32,16 +34,20 @@ model.eval()
 # model.load_state_dict(torch.load(path_to_trained_model))
 # model.eval()
 
-for i, data in enumerate(test_loader, 0):
 
-    cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
+
+for i, data in enumerate(test_loader, 0):
+    try:
+        cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
+    except:
+        error_data += 1
+        print('No.{0} NOT Pass! Lost detection!'.format(i))
+        continue
 
     # # output is None if the mask from the output of the SegNet is empty because the object couldn't be detected
     # if cloud is None or choice is None or img_crop is None or target_t is None \
     #         or target_r is None or model_vtx is None or obj_idx is None or gt_t is None:
     #     continue
-    if torch.equal(cloud, torch.LongTensor([0])):
-        continue
 
     cloud = Variable(cloud).cuda()  # shape: 500, 3
     choice = Variable(choice).cuda()  # shape: 1, 500
@@ -67,8 +73,8 @@ for i, data in enumerate(test_loader, 0):
     # ground truth object points in camera coordinates
     target = target_r[0].cpu().detach().numpy() + gt_t.cpu().data.numpy()[0]
 
-    print("target:", target.shape)  # 500 x 3
-    print("pred:", pred.shape)      # 500 x 3
+#     print("target:", target.shape)  # 500 x 3
+#     print("pred:", pred.shape)      # 500 x 3
 
     if obj_idx.item() in symmetric_object_indices:
         distance = average_distance_symmetric(torch.Tensor(pred).T, torch.Tensor(target).T)
