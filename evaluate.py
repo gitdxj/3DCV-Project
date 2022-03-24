@@ -54,7 +54,7 @@ for i, data in enumerate(test_loader, 0):
 
     # prediction
     pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
-    pred_t, pred_mask = ransac_voting_layer(cloud, pred_t)
+    pred_t, pred_mask = ransac_voting_layer(cloud.cpu(), pred_t.cpu())
     pred_t = pred_t.cpu().data.numpy()
     how_min, which_min = torch.min(pred_c, 1)
     pred_r = pred_r[0][which_min[0]].view(-1).cpu().data.numpy()
@@ -65,13 +65,13 @@ for i, data in enumerate(test_loader, 0):
     # ground truth object points in camera coordinates
     target = target_r[0].cpu().detach().numpy() + gt_t.cpu().data.numpy()[0]
 
-    print("target:", target.shape)
-    print("pred:", pred.shape)
+    print("target:", target.shape)  # 500 x 3
+    print("pred:", pred.shape)      # 500 x 3
 
     if obj_idx.item() in symmetric_object_indices:
-        distance = average_distance_symmetric(pred, target)
+        distance = average_distance_symmetric(torch.Tensor(pred).T, torch.Tensor(target).T)
     else:
-        distance = average_distance(pred, target)
+        distance = average_distance(torch.Tensor(pred).T, torch.Tensor(target).T)
 
     if distance < 0.1 * obj_diameter:
         object_success_count[obj_idx.item()] += 1

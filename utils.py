@@ -3,7 +3,7 @@ import torch
 from torch.autograd import Variable
 # from torch.utils.tensorboard import SummaryWriter
 import tensorflow as tf
-from loss import Loss
+from my_loss import Loss
 from model.network import PoseNet
 import time
 
