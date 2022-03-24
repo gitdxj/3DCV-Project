@@ -36,9 +36,11 @@ for i, data in enumerate(test_loader, 0):
 
     cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
 
-    # output is None if the mask from the output of the SegNet is empty because the object couldn't be detected
-    if cloud is None or choice is None or img_crop is None or target_t is None \
-            or target_r is None or model_vtx is None or obj_idx is None or gt_t is None:
+    # # output is None if the mask from the output of the SegNet is empty because the object couldn't be detected
+    # if cloud is None or choice is None or img_crop is None or target_t is None \
+    #         or target_r is None or model_vtx is None or obj_idx is None or gt_t is None:
+    #     continue
+    if torch.equal(cloud, torch.LongTensor([0])):
         continue
 
     cloud = Variable(cloud).cuda()  # shape: 500, 3

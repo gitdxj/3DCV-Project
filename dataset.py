@@ -115,7 +115,9 @@ class LinemodDataset(data.Dataset):
         # select cloud_pt_num points to make a point cloud
         choice = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]  # nonzero returns a tuple
         if len(choice) == 0:
-            return None, None, None, None, None, None, None, None
+            cc = torch.LongTensor([0])
+            return (cc, cc, cc, cc, cc, cc)
+            # return None, None, None, None, None, None, None, None
         if len(choice) > self.cloud_pt_num:
             # randomly select cloud_pt_num points
             choice = np.random.choice(choice, self.cloud_pt_num, replace=False)
