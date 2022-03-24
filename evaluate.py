@@ -1,13 +1,16 @@
 import torch
 from torch.autograd import Variable
+import numpy as np
 
 from lib.evaluation_metrics import average_distance, average_distance_symmetric
+from lib.transformations import quaternion_matrix
 from model.network import PoseNet
 from dataset import LinemodDataset
+from model.ransac_voting.ransac_voting import ransac_voting_layer
 
 
-dataset_path = 'data/Linemod_preprocessed'
-path_to_trained_model = ...  # todo add the path here
+dataset_path = '/input/Linemod_preprocessed'
+path_to_trained_model = "./posenet.pt"
 result_path = 'results/results.txt'
 
 dataset = LinemodDataset(mode='eval', dataset_path=dataset_path, cloud_pt_num=500)
@@ -20,10 +23,13 @@ object_success_count = [0 for _ in range(len(object_list))]
 # counts the number of times each object has been evaluated
 evaluated_objects = [0 for _ in range(len(object_list))]
 
-model = PoseNet(cloud_pt_num=500, obj_num=len(object_list))
+model = torch.load(path_to_trained_model)
 model.cuda()
-model.load_state_dict(torch.load(path_to_trained_model))
 model.eval()
+# model = PoseNet(cloud_pt_num=500, obj_num=len(object_list))
+# model.cuda()
+# model.load_state_dict(torch.load(path_to_trained_model))
+# model.eval()
 
 for i in range(len(dataset)):
 
@@ -47,16 +53,24 @@ for i in range(len(dataset)):
 
     # prediction
     pred_r, pred_t, pred_c = model(img_crop, cloud, choice, obj_idx)
-    # todo compute object point cloud from model prediction
-    prediction = ...
+    pred_t, pred_mask = ransac_voting_layer(cloud, pred_t)
+    pred_t = pred_t.cpu().data.numpy()
+    how_min, which_min = torch.min(pred_c, 1)
+    pred_r = pred_r[0][which_min[0]].view(-1).cpu().data.numpy()
+    pred_r = quaternion_matrix(pred_r)[:3, :3]
+    model_vtx = model_vtx[0].cpu().detach().numpy()
+    pred = np.dot(model_vtx, pred_r.T) + pred_t
 
     # ground truth object points in camera coordinates
-    ground_truth = target_r + target_t
+    target = target_r[0].cpu().detach().numpy() + gt_t.cpu().data.numpy()[0]
+
+    print("target:", target.shape)
+    print("pred:", pred.shape)
 
     if obj_idx.item() in symmetric_object_indices:
-        distance = average_distance_symmetric(prediction, ground_truth)
+        distance = average_distance_symmetric(pred, target)
     else:
-        distance = average_distance(prediction, ground_truth)
+        distance = average_distance(pred, target)
 
     if distance < 0.1 * obj_diameter:
         object_success_count[obj_idx.item()] += 1
