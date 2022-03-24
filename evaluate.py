@@ -14,6 +14,7 @@ path_to_trained_model = "./posenet.pt"
 result_path = 'results/results.txt'
 
 dataset = LinemodDataset(mode='eval', dataset_path=dataset_path, cloud_pt_num=500)
+test_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
 
 object_list = dataset.objects
 symmetric_object_indices = dataset.get_sym_list()
@@ -31,9 +32,9 @@ model.eval()
 # model.load_state_dict(torch.load(path_to_trained_model))
 # model.eval()
 
-for i in range(len(dataset)):
+for i, data in enumerate(test_loader, 0):
 
-    cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = dataset[i]
+    cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
 
     # output is None if the mask from the output of the SegNet is empty because the object couldn't be detected
     if cloud is None or choice is None or img_crop is None or target_t is None \
