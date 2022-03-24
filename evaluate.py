@@ -77,12 +77,13 @@ for i, data in enumerate(test_loader, 0):
 #     print("pred:", pred.shape)      # 500 x 3
 
     if obj_idx.item() in symmetric_object_indices:
-        distance = average_distance_symmetric(torch.Tensor(pred).T, torch.Tensor(target).T)
+        distance = average_distance_symmetric(torch.Tensor(pred), torch.Tensor(target))
     else:
-        distance = average_distance(torch.Tensor(pred).T, torch.Tensor(target).T)
+        distance = average_distance(torch.Tensor(pred), torch.Tensor(target))
 
     if distance < 0.1 * obj_diameter:
         object_success_count[obj_idx.item()] += 1
+    print("obj:", object_list[obj_idx.item()], "distance:", distance, "diameter:", obj_diameter)
 
     evaluated_objects[obj_idx.item()] += 1
 
