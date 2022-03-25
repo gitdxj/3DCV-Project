@@ -132,7 +132,7 @@ def train_linemod2(epochs):
     objects_num = len(objects)
 
     # model
-    model = PoseNet(cloud_pt_num=500, obj_num=objects_num, rot_num=60)
+    model = PoseNet(cloud_pt_num=500, obj_num=objects_num, rot_num=12)
     model.cuda()
 
     # loss func
