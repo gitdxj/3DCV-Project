@@ -1,13 +1,12 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-
 import model.psp.extractors as extractors
 
 
 class PSPModule(nn.Module):
     def __init__(self, features, out_features=1024, sizes=(1, 2, 3, 6)):
-        super().__init__()
+        super(PSPModule, self).__init__()
         self.stages = []
         self.stages = nn.ModuleList([self._make_stage(features, size) for size in sizes])
         self.bottleneck = nn.Conv2d(features * (len(sizes) + 1), out_features, kernel_size=1)
@@ -27,23 +26,20 @@ class PSPModule(nn.Module):
 
 class PSPUpsample(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super().__init__()
+        super(PSPUpsample, self).__init__()
         self.conv = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(in_channels, out_channels, 3, padding=1),
-            nn.BatchNorm2d(out_channels),
             nn.PReLU()
         )
 
     def forward(self, x):
-        h, w = 2 * x.size(2), 2 * x.size(3)
-        p = F.upsample(input=x, size=(h, w), mode='bilinear')
-        return self.conv(p)
+        return self.conv(x)
 
 
 class PSPNet(nn.Module):
-    def __init__(self, n_classes=18, sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet34',
-                 pretrained=True):
-        super().__init__()
+    def __init__(self, n_classes=21, sizes=(1, 2, 3, 6), psp_size=2048, deep_features_size=1024, backend='resnet18', pretrained=False):
+        super(PSPNet, self).__init__()
         self.feats = getattr(extractors, backend)(pretrained)
         self.psp = PSPModule(psp_size, 1024, sizes)
         self.drop_1 = nn.Dropout2d(p=0.3)
@@ -58,7 +54,8 @@ class PSPNet(nn.Module):
         )
 
     def forward(self, x):
-        f, class_f = self.feats(x) 
+        f, _ = self.feats(x)
+
         p = self.psp(f)
         p = self.drop_1(p)
 

@@ -89,16 +89,17 @@ class PoseNet(nn.Module):
         x = F.relu(self.edge_conv1(self.get_edge_feature(x, topk_idx)))  # channel_num: 2*3 -> 64, *2 is from edge_feat
         x, _ = torch.max(x, dim=3, keepdim=False)
         x = F.relu(self.edge_conv2(self.get_edge_feature(x, topk_idx)))  # channel_num: 2*64 -> 64
-        x_m, _ = torch.max(x, dim=3, keepdim=False)
-
-        x = F.relu(self.edge_conv3(self.get_edge_feature(x_m, topk_idx)))  # channel_num: 2*64 ->128
         x, _ = torch.max(x, dim=3, keepdim=False)
 
-        # image feature branch
-        y_m = F.relu(self.conv1(y))
-        y = F.relu(self.conv2(y_m))
+        y = F.relu(self.conv1(y))
 
-        point_feat = torch.cat((x_m, y_m), dim=1)  # 1 x 128 x 500
+        point_feat = torch.cat((x, y), dim=1)  # 1 x 128 x 500
+
+        x = F.relu(self.edge_conv3(self.get_edge_feature(x, topk_idx)))  # channel_num: 2*64 ->128
+        x, _ = torch.max(x, dim=3, keepdim=False)
+
+        y = F.relu(self.conv2(y))
+
         fusion = torch.cat((x, y), dim=1)
 
         # translation
@@ -131,8 +132,6 @@ class PoseNet(nn.Module):
         r_x = F.relu(self.conv4_r(r_x))
         r_x = F.relu(self.conv5_r(r_x))
         r_x = self.conv6_r(r_x).view(batch_size, self.obj_num, self.rot_num, 4)
-
-        # TODO: select prediction
 
         out_tx = torch.index_select(t_x[0], 0, obj_idx[0])
         out_tx = out_tx.contiguous().transpose(2, 1).contiguous()
