@@ -62,7 +62,7 @@ def train_linemod(epochs):
         # set model to training mode
         model.train()
         optimizer.zero_grad()
-        for _ in range(10):
+        for _ in range(1):
             for i, data in enumerate(train_loader, 0):
                 cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
                 cloud = Variable(cloud).cuda()          # shape: 500, 3
@@ -132,7 +132,7 @@ def train_linemod2(epochs):
     objects_num = len(objects)
 
     # model
-    model = PoseNet(cloud_pt_num=500, obj_num=13, rot_num=12)
+    model = PoseNet(cloud_pt_num=500, obj_num=objects_num, rot_num=12)
     model.cuda()
 
     # loss func
@@ -241,12 +241,19 @@ def train_linemod2(epochs):
             # compute loss
             loss, r_loss, t_loss, reg_loss = criterion(pred_r, pred_t, pred_c, target_r, target_t, model_vtx, obj_idx, obj_diameter)
 
-            test_count += 1
+            
             # evalaution
             how_min, which_min = torch.min(pred_c, 1)
             pred_r = pred_r[0][which_min[0]].view(-1).cpu().data.numpy()
             pred_r = quaternion_matrix(pred_r)[:3, :3]
-            pred_t, pred_mask = ransac_voting_layer(cloud, pred_t)
+#             print("cloud", cloud.shape)
+#             print("pred_t", pred_t.shape)
+            try:
+                pred_t, pred_mask = ransac_voting_layer(cloud, pred_t)
+            except:
+                print("Runtime Err ransac_voting_layer", str(j))
+                print(pred_t)
+                continue
             pred_t = pred_t.cpu().data.numpy()
             cloud = cloud[0].cpu().detach().numpy()
             pred = np.dot(cloud, pred_r.T) + pred_t
@@ -261,6 +268,7 @@ def train_linemod2(epochs):
                 dis = np.mean(np.linalg.norm(pred - target, axis=1))
             if dis < 0.1 * obj_diameter:
                 success_count[obj_idx[0].item()] += 1
+            test_count += 1
             num_count[obj_idx[0].item()] += 1
             test_dis += dis
         # compute accuracy
@@ -276,7 +284,7 @@ def train_linemod2(epochs):
         # save model
         if test_dis < best_test:
             best_test = test_dis
-        torch.save(model.state_dict(), './results/pose_model_{1:02d}.pth'.format(epoch))
+        torch.save(model.state_dict(), './results/pose_model_{}.pth'.format(epoch))
         print('>>>>>>>>----------epoch {0} test finish---------<<<<<<<<'.format(epoch))
 
 
