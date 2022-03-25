@@ -3,21 +3,25 @@ import torch.nn as nn
 from torch.nn import Conv2d, Conv1d
 import torch.nn.functional as F
 import numpy as np
+import math
 from model.psp.pspnet import PSPNet
 from lib.transformations import quaternion_from_matrix
 
 
 class PoseNet(nn.Module):
-    def __init__(self, cloud_pt_num, obj_num, rot_num=12, k=16):
+    def __init__(self, cloud_pt_num, obj_num, rot_num=60, k=16):
         super(PoseNet, self).__init__()
         self.cloud_pt_num = cloud_pt_num
         self.obj_num = obj_num
         self.rot_num = rot_num
         self.k = k
 
-        # TODO: sample rotation
-#         self.rot_anchors = torch.Tensor(sample_rotations_12()).cuda()
-        self.rot_anchors = sample_rotations_12()
+        if rot_num == 12:
+            self.rot_anchors = sample_rotations_12()
+        elif rot_num == 60:
+            self.rot_anchors = sample_rotations_60()
+        else:
+            print("rot_num should be 12 or 60")
 
         self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
@@ -73,7 +77,7 @@ class PoseNet(nn.Module):
 
         psp_feat_channels = psp_feat.shape[1]  # number of channels of psp_feat = 32
         # pixel-wise selection of psp_feat according to cloud points index
-        psp_feat = torch.gather(input=psp_feat, dim=2, index=choice.repeat(1, psp_feat_channels, 1))
+        psp_feat = torch.gather(input=psp_feat, dim=2, index=choice.repeat(1, psp_feat_channels, 1))  # 1x32x500
 
         x = torch.transpose(cloud, dim0=1, dim1=2)  # shape: 1 x 3 x 500
         y = psp_feat
@@ -209,6 +213,37 @@ def sample_rotations_12():
     for i in range(12):
         quaternion_group[i] = quaternion_from_matrix(group[i])
     return quaternion_group.astype(float)
+
+
+def sample_rotations_60():
+    phi = (1 + math.sqrt(5)) / 2
+    R1 = np.array([[-phi/2, 1/(2*phi), -0.5], [-1/(2*phi), 0.5, phi/2], [0.5, phi/2, -1/(2*phi)]])
+    R2 = np.array([[phi/2, 1/(2*phi), -0.5], [1/(2*phi), 0.5, phi/2], [0.5, -phi/2, 1/(2*phi)]])
+    group = [np.eye(3, dtype=float)]
+    n = 0
+    while len(group) > n:
+        n = len(group)
+        set_so_far = group
+        for rot in set_so_far:
+            for R in [R1, R2]:
+                new_R = np.matmul(rot, R)
+                new = True
+                for item in set_so_far:
+                    if np.sum(np.absolute(item - new_R)) < 1e-6:
+                        new = False
+                        break
+                if new:
+                    group.append(new_R)
+                    break
+            if new:
+                break
+    # return np.array(group)
+    group = np.array(group)
+    quaternion_group = np.zeros((60, 4))
+    for i in range(60):
+        quaternion_group[i] = quaternion_from_matrix(group[i])
+    return quaternion_group.astype(float)
+
 
 
 
