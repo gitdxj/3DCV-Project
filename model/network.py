@@ -5,7 +5,8 @@ import torch.nn.functional as F
 import numpy as np
 import math
 from model.psp.pspnet import PSPNet
-from lib.transformations import quaternion_from_matrix
+from lib.transformations import quaternion_from_matrix, quaternion_matrix
+from model.ransac_voting.ransac_voting import ransac_voting_layer
 
 
 class PoseNet(nn.Module):
@@ -140,7 +141,7 @@ class PoseNet(nn.Module):
 
         out_rx = torch.index_select(r_x[0], 0, obj_idx[0])  # 1 x rot_num x 4
         out_rx = F.normalize(out_rx, p=2, dim=2)  # 1 x rot_num x 4
-        rot_anchors = torch.from_numpy(self.rot_anchors).float().cuda()
+        rot_anchors = torch.from_numpy(self.rot_anchors).float().to(out_rx.device)
         rot_anchors = torch.unsqueeze(torch.unsqueeze(rot_anchors, dim=0), dim=3)  # 1 x rot_num x 4 x 1
         out_rx = torch.unsqueeze(out_rx, 2)  # 1 x rot_num x 1 x 4
         out_rx = torch.cat((out_rx[:, :, :, 0], -out_rx[:, :, :, 1], -out_rx[:, :, :, 2], -out_rx[:, :, :, 3], \
@@ -244,6 +245,23 @@ def sample_rotations_60():
     return quaternion_group.astype(float)
 
 
+def get_prediction_from_model_output(pred_r, pred_t, pred_c, cloud):
+    """
+    Computes the final estimate of the rotation and translation from the model output for a batch size of 1.
+    :param pred_r: 1 x num_rot_anchors x 4, predicted rotations as quaternions, one per rotation anchor
+    :param pred_t: 1 x num_points x 3, predicted unit vectors pointing from each object point to its center
+    :param pred_c: 1 x num_rot_anchors, predicted uncertainty score (between 0 and 1) for each predicted rotation
+    :param cloud: 1 x num_points x 3, object points
+    :return:
+    """
+    pred_t, pred_mask = ransac_voting_layer(cloud.cpu(), pred_t.cpu())
+    pred_t = pred_t.cpu().data.numpy()
+    _, min_idx = torch.min(pred_c, 1)
+    # select the rotation with minimal predicted uncertainty score
+    pred_r = pred_r[0][min_idx[0]].view(-1).cpu().data.numpy()
+    # convert quaternion to rotation matrix
+    pred_r = quaternion_matrix(pred_r)[:3, :3]
+    return pred_r, pred_t
 
 
 if __name__ == '__main__':

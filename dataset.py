@@ -12,6 +12,7 @@ import yaml
 class LinemodDataset(data.Dataset):
     def __init__(self, mode, dataset_path, cloud_pt_num, obj_list=[1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]):
         self.mode = mode          # either 'train', 'test' or 'eval'
+        self.dataset_path = dataset_path
         self.objects = obj_list
         self.cloud_pt_num = cloud_pt_num
         self.sym_obj = [7, 8]
@@ -34,7 +35,7 @@ class LinemodDataset(data.Dataset):
                 index_list = [line.rstrip() for line in file]  # get rid of '\n' in each line, elements are of str
 
             gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
-            ply_path = os.path.join(dataset_path, 'models', 'obj_' + str(obj).zfill(2) + '.ply')
+            ply_path = self.get_model_ply_path(obj)
             models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
 
             # read model diameter
@@ -174,6 +175,15 @@ class LinemodDataset(data.Dataset):
 
     def get_obj_diameter(self, obj_id):
         return self.diameter_dict.get(obj_id, None)
+
+    def get_camera_matrix(self):
+        return np.array([self.cam_fx, 0.0, self.cam_cx, 0.0, self.cam_fy, self.cam_cy, 0.0, 0.0, 1.0]).reshape((3, 3))
+
+    def get_model_ply_path(self, object_id):
+        return os.path.join(self.dataset_path, 'models', 'obj_' + str(object_id).zfill(2) + '.ply')
+
+    def get_all_model_vertices(self, object_id):
+        return read_ply_vtx(self.get_model_ply_path(object_id)) / 1000  # divide by 1000 to get meters as unit
 
 
 def read_ply_vtx(filepath):
