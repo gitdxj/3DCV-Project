@@ -65,14 +65,14 @@ def train_linemod(epochs):
         for _ in range(1):
             for i, data in enumerate(train_loader, 0):
                 cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
-                cloud = Variable(cloud).cuda()          # shape: 500, 3
-                choice = Variable(choice).cuda()        # shape: 1, 500
-                img_crop = Variable(img_crop).cuda()    # shape: 3, 80, 80
-                target_t = Variable(target_t).cuda()    # shape: 500, 3
-                target_r = Variable(target_r).cuda()    # shape: 500, 3
-                model_vtx = Variable(model_vtx).cuda()  # shape: 500, 3
-                obj_idx = Variable(obj_idx).cuda()      # shape: 1
-                gt_t = Variable(gt_t).cuda()            # shape: 3
+                cloud = Variable(cloud).cuda()          # shape: 1, 500, 3
+                choice = Variable(choice).cuda()        # shape: 1, 1, 500
+                img_crop = Variable(img_crop).cuda()    # shape: 1, 3, 80, 80
+                target_t = Variable(target_t).cuda()    # shape: 1, 500, 3
+                target_r = Variable(target_r).cuda()    # shape: 1, 500, 3
+                model_vtx = Variable(model_vtx).cuda()  # shape: 1, 500, 3
+                obj_idx = Variable(obj_idx).cuda()      # shape: 1, 1
+                gt_t = Variable(gt_t).cuda()            # shape: 1, 3
 
                 obj_diameter = train_set.diameter_dict[train_set.objects[obj_idx]]
 
