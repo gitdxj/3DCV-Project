@@ -1,6 +1,6 @@
 import torch
 from model.network import PoseNet
-from utils import train_linemod2
+from utils import train_linemod
 
 
 # img, x, choose, obj = torch.randn(1, 3, 80, 80), torch.randn(1, 500, 3), torch.randint(low=0, high=6400, size=(1, 500)), torch.Tensor([1]).type(torch.int)
@@ -16,4 +16,4 @@ from utils import train_linemod2
 # print(loss())
 
 if __name__ == '__main__':
-    train_linemod2(50)
+    train_linemod(50)

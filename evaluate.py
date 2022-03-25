@@ -28,7 +28,8 @@ error_data = 0
 
 model = torch.load(path_to_trained_model)
 model.cuda()
-model.eval()
+# model.eval()
+
 # model = PoseNet(cloud_pt_num=500, obj_num=len(object_list))
 # model.cuda()
 # model.load_state_dict(torch.load(path_to_trained_model))
