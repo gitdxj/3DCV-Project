@@ -57,7 +57,7 @@ def train_linemod(epochs):
         # set model to training mode
         model.train()
         optimizer.zero_grad()
-        for _ in range(1):
+        for _ in range(10):
             for i, data in enumerate(train_loader, 0):
                 cloud, choice, img_crop, target_t, target_r, model_vtx, obj_idx, gt_t = data
                 cloud = Variable(cloud).cuda()          # shape: 1, 500, 3
