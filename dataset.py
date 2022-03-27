@@ -13,17 +13,17 @@ class LinemodDataset(data.Dataset):
     def __init__(self, mode, dataset_path, cloud_pt_num, obj_list=[1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]):
         self.mode = mode          # either 'train', 'test' or 'eval'
         self.dataset_path = dataset_path
-        self.objects = obj_list
-        self.cloud_pt_num = cloud_pt_num
-        self.sym_obj = [7, 8]
+        self.objects = obj_list  # object ids
+        self.cloud_pt_num = cloud_pt_num  # number of points sampled from object point cloud
+        self.sym_obj = [7, 8]  # indices of symmetric objects in list of object ids
 
         self.rgb_list = []        # path to rgb img
         self.depth_list = []      # path to depth img
         self.label_list = []      # path to mask
-        self.obj_list = []        # obj index: 1 to 15
+        self.obj_list = []        # obj id: 1 to 15
         self.index_list = []      # img index
         self.diameter_dict = dict()   # model diameters
-        self.gt_dict = dict()          # ground truth: rotation, translation and bb
+        self.gt_dict = dict()          # ground truth: rotation, translation and bounding box
         self.vtx_dict = dict()         # vertices of models read from ply file
 
         for obj in obj_list:
@@ -34,15 +34,15 @@ class LinemodDataset(data.Dataset):
             with open(index_file, 'r') as file:
                 index_list = [line.rstrip() for line in file]  # get rid of '\n' in each line, elements are of str
 
-            gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')
-            ply_path = self.get_model_ply_path(obj)
-            models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')
+            gt_path = os.path.join(dataset_path, 'data', str(obj).zfill(2), 'gt.yml')  # path to ground truth info
+            ply_path = self.get_model_ply_path(obj)  # path to file with model vertices
+            models_info_path = os.path.join(dataset_path, 'models', 'models_info.yml')  # file contains diameter of models
 
             # read model diameter
             models_info_yml = yaml.safe_load(open(models_info_path))
             self.diameter_dict[obj] = models_info_yml[obj]['diameter'] / 1000
 
-            # read vertexes of model from ply file
+            # read vertices of model from ply file
             vtx = read_ply_vtx(ply_path)
             self.vtx_dict[obj] = vtx
             # read ground truth to gt_dict
@@ -63,6 +63,7 @@ class LinemodDataset(data.Dataset):
                 self.depth_list.append(depth_path)
                 self.label_list.append(label_path)
 
+        # camera parameters
         self.cam_cx = 325.26110
         self.cam_cy = 242.04899
         self.cam_fx = 572.41140
@@ -71,7 +72,7 @@ class LinemodDataset(data.Dataset):
         self.xmap = np.array([[i for i in range(640)] for j in range(480)])
         self.ymap = np.array([[j for i in range(640)] for j in range(480)])
 
-        self.num_pt_mesh = 500
+        self.num_pt_mesh = 500  # number of points sampled from the model vertices
 
         self.trancolor = transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)  # used for data augmentation in train mode
         self.transform = transforms.Compose([transforms.ToTensor(),
@@ -93,6 +94,7 @@ class LinemodDataset(data.Dataset):
 
         # get ground truth parameters from self.gt_dict
         if obj_id == 2:
+            # gt.yml from object 2 has a different structure than the others
             for each_dict in self.gt_dict[obj_id][img_id]:
                 if each_dict['obj_id'] == 2:
                     gt = each_dict
@@ -116,9 +118,9 @@ class LinemodDataset(data.Dataset):
         # select cloud_pt_num points to make a point cloud
         choice = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]  # nonzero returns a tuple
         if len(choice) == 0:
+            # this is the case when the mask is empty -> no object could be detected
             cc = torch.LongTensor([0])
-            return (cc, cc, cc, cc, cc, cc)
-#             return None, None, None, None, None, None, None, None
+            return cc, cc, cc, cc, cc, cc
         if len(choice) > self.cloud_pt_num:
             # randomly select cloud_pt_num points
             choice = np.random.choice(choice, self.cloud_pt_num, replace=False)
@@ -131,14 +133,15 @@ class LinemodDataset(data.Dataset):
         y_points = self.ymap[rmin:rmax, cmin:cmax].flatten()[choice].reshape(-1, 1)
         choice = np.array([choice])
 
-        pt2 = depth_points / 1000
+        # transform image points to camera coordinates
+        pt2 = depth_points / 1000  # divide by 1000 to get meters as unit
         pt0 = (x_points - self.cam_cx) * pt2 / self.cam_fx
         pt1 = (y_points - self.cam_cy) * pt2 / self.cam_fy
         cloud = np.hstack((pt0, pt1, pt2))
 
         # get ground truth rotation and translation
         target_rotation = np.resize(np.array(gt['cam_R_m2c']), (3, 3))
-        target_translation = np.array(gt['cam_t_m2c']) / 1000
+        target_translation = np.array(gt['cam_t_m2c']) / 1000  # divide by 1000 to get meters as unit
 
         if self.mode == 'train':
             # add random noise to target translation and point cloud (data augmentation)
@@ -151,9 +154,11 @@ class LinemodDataset(data.Dataset):
 
         gt_translation = target_translation
         target_translation = target_translation - cloud
+        # unit vectors pointing from each object point to the ground-truth object center
         target_translation = target_translation / np.linalg.norm(target_translation, axis=1).reshape(-1, 1)
 
-        model_vtx = self.vtx_dict[obj_id] / 1000.0
+        model_vtx = self.vtx_dict[obj_id] / 1000.0  # divide by 1000 to get meters as unit
+        # downsample model vertices
         vtx_choice = np.random.choice(len(model_vtx), self.num_pt_mesh, replace=False)
         model_vtx = model_vtx[vtx_choice, :]
         target_rotation = np.dot(model_vtx, target_rotation.T)
