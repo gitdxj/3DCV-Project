@@ -2,7 +2,9 @@
 
 This is a re-implementation of the ["Robust 6D Object Pose Estimation by 
 Learning RGB-D Features"](https://arxiv.org/abs/2003.00188) paper. The original implementation can be found on
-[https://github.com/mentian/object-posenet](https://github.com/mentian/object-posenet).
+[https://github.com/mentian/object-posenet](https://github.com/mentian/object-posenet).  
+
+The PSPNet under model/psp is from https://github.com/Lextal/pspnet-pytorch.
 
 ## Data
 The pose estimation network is trained on the LINEMOD dataset. A preprocessed version of
