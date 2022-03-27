@@ -194,6 +194,10 @@ class PoseNet(nn.Module):
 
 
 def sample_rotations_12():
+    """
+    Returns the elements of the tetrahedral group as quaternions.
+    Taken from https://github.com/mentian/object-posenet/blob/master/lib/utils.py
+    """
     group = np.array([[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
                       [[1, 0, 0], [0, -1, 0], [0, 0, -1]],
                       [[-1, 0, 0], [0, 1, 0], [0, 0, -1]],
@@ -215,6 +219,10 @@ def sample_rotations_12():
 
 
 def sample_rotations_60():
+    """
+    Returns the elements of the icosahedral group as quaternions.
+    Taken from https://github.com/mentian/object-posenet/blob/master/lib/utils.py.
+    """
     phi = (1 + math.sqrt(5)) / 2
     R1 = np.array([[-phi/2, 1/(2*phi), -0.5], [-1/(2*phi), 0.5, phi/2], [0.5, phi/2, -1/(2*phi)]])
     R2 = np.array([[phi/2, 1/(2*phi), -0.5], [1/(2*phi), 0.5, phi/2], [0.5, -phi/2, 1/(2*phi)]])
