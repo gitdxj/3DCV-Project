@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import math
 from model.psp.pspnet import PSPNet
-from lib.transformations import quaternion_from_matrix, quaternion_matrix
+from utils.transformations import quaternion_from_matrix, quaternion_matrix
 from model.ransac_voting.ransac_voting import ransac_voting_layer
 
 
@@ -22,7 +22,7 @@ class PoseNet(nn.Module):
         elif rot_num == 60:
             self.rot_anchors = sample_rotations_60()
         else:
-            print("rot_num should be 12 or 60")
+            raise ValueError("rot_num should be 12 or 60")
 
         self.pspnet = PSPNet(sizes=(1, 2, 3, 6), psp_size=512, deep_features_size=256, backend='resnet18', pretrained=False)
 
@@ -132,8 +132,6 @@ class PoseNet(nn.Module):
         r_x = F.relu(self.conv4_r(r_x))
         r_x = F.relu(self.conv5_r(r_x))
         r_x = self.conv6_r(r_x).view(batch_size, self.obj_num, self.rot_num, 4)
-
-        # TODO: select prediction
 
         out_tx = torch.index_select(t_x[0], 0, obj_idx[0])
         out_tx = out_tx.contiguous().transpose(2, 1).contiguous()
@@ -263,9 +261,3 @@ def get_prediction_from_model_output(pred_r, pred_t, pred_c, cloud):
     # convert quaternion to rotation matrix
     pred_r = quaternion_matrix(pred_r)[:3, :3]
     return pred_r, pred_t
-
-
-if __name__ == '__main__':
-    img, x, choose, obj = torch.randn(1, 3, 80, 80), torch.randn(1, 500, 3), torch.randint(low=0, high=6400, size=(1, 500)), torch.Tensor([1]).type(torch.int)
-    model = PoseNet(500, 13, 24)
-    model(img, x, choose, obj)

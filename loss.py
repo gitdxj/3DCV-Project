@@ -125,6 +125,4 @@ class Loss(_Loss):
         self.rot_anchors = rot_anchors
 
     def forward(self, pred_r, pred_t, pred_c, target_r, target_t, model_points, idx, obj_diameter):
-        """
-        """
         return loss_calculation(pred_r, pred_t, pred_c, target_r, target_t, model_points, idx, obj_diameter, self.rot_anchors, self.sym_list)
