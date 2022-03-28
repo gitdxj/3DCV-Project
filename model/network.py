@@ -259,7 +259,7 @@ def get_prediction_from_model_output(pred_r, pred_t, pred_c, cloud):
     :param pred_t: 1 x num_points x 3, predicted unit vectors pointing from each object point to its center
     :param pred_c: 1 x num_rot_anchors, predicted uncertainty score (between 0 and 1) for each predicted rotation
     :param cloud: 1 x num_points x 3, object points
-    :return:
+    :return: predicted rotation (3 x 3), predicted translation (1 x 3)
     """
     pred_t, pred_mask = ransac_voting_layer(cloud.cpu(), pred_t.cpu())
     pred_t = pred_t.cpu().data.numpy()

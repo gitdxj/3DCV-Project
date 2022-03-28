@@ -6,7 +6,7 @@ def average_distance(prediction, ground_truth):
     Computes the average distance between predicted and ground truth object points
     :param prediction: num_points_model x 3
     :param ground_truth: num_points_model x 3
-    :return:
+    :return: ADD metric of prediction compared to ground-truth
     """
     return torch.mean(torch.norm((prediction - ground_truth), dim=1))
 
@@ -17,7 +17,7 @@ def average_distance_symmetric(prediction, ground_truth):
     to the closest ground truth object point
     :param prediction: num_points_model x 3
     :param ground_truth: num_points_model x 3
-    :return:
+    :return: ADD-S metric of prediction compared to ground-truth
     """
     # pairwise distances between predicted points and ground truth points
     dists = torch.cdist(prediction, ground_truth, p=2)  # num_points_model x num_points_model
