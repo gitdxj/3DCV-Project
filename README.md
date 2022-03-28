@@ -19,7 +19,8 @@ Our trained model can be downloaded [here](https://drive.google.com/file/d/1nzxO
 
 ## How to run the demo notebook
 Install the requirements from requirements.txt, download the dataset and the trained model
-and adjust the paths to the dataset directory and to the trained model if necessary.
+and adjust the paths to the dataset directory and to the trained model if necessary. 
+The python version we used is Python 3.6.5.
 
 ## Training
 Cuda is required for training. Adjust the dataset_path in train_linemod in train.py and then 
